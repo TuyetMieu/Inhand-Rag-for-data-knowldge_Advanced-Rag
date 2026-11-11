@@ -1,0 +1,13 @@
+[project]
+name = "inhand-rag"
+version = "0.1.0"
+description = "Advanced RAG hỗ trợ nhân viên bất động sản về hồ sơ và gợi ý pháp lý"
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

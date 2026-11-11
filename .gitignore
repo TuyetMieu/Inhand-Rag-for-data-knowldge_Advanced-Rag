@@ -1,0 +1,24 @@
+# Bí mật
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Dữ liệu và chỉ mục (không đưa lên git)
+data/
+qdrant_storage/
+*.sqlite3
+
+# Kết quả chạy thử
+eval/results/
+
+# Rác hệ điều hành và Office
+.DS_Store
+__MACOSX/
+~$*
+
+# Model LLM tải bằng Ollama (OLLAMA_MODELS)
+models/
