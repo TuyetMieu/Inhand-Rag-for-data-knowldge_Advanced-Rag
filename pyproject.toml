@@ -2,8 +2,13 @@
 name = "inhand-rag"
 version = "0.1.0"
 description = "Advanced RAG hỗ trợ nhân viên bất động sản về hồ sơ và gợi ý pháp lý"
-requires-python = ">=3.12"
-dependencies = []
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "torch==2.14.1",
+    "sentence-transformers==6.3.0",
+    "transformers==5.22.2",
+    "qdrant-client==1.20.0",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -11,3 +16,12 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# torch bản CUDA 13.0 (cần cho RTX 50xx), lấy từ kho của PyTorch thay vì PyPI.
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true

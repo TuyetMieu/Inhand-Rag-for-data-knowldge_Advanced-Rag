@@ -22,3 +22,10 @@ __MACOSX/
 
 # Model LLM tải bằng Ollama (OLLAMA_MODELS)
 models/
+
+# Công cụ tải về (Qdrant binary)
+tools/
+
+# Bộ nhớ đệm và môi trường
+.cache/
+.qdrant-initialized
