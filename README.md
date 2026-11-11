@@ -78,11 +78,41 @@ python scripts\build_kh002.py "..\KH002 (1).zip" data\hoso\KH002
 python scripts\validate_dataset.py data\hoso\KH002
 ```
 
+## Dữ liệu bảng (Excel → SQLite)
+
+```bat
+set PYTHONPATH=src
+```
+
+```bat
+.venv\Scripts\python -m inhand_rag.ingest.bang "..\Data\Du_lieu_mau_100_final.xlsx" data\bang\bang.sqlite3
+```
+
+```bat
+.venv\Scripts\python scripts\check_hoso_vs_bang.py data\hoso\KH002 data\bang\bang.sqlite3
+```
+
+- `bang.py`: 6 sheet thành 6 bảng (`bang_gia`, `khach_hang`, `mua_ban`, `ban_giao`, `tien_do_thanh_toan`, `giao_dich`), tên cột không dấu, tiền là số nguyên, ngày theo ISO; in báo cáo khóa nối, tổng các đợt, căn bán trùng, CCCD.
+- `check_hoso_vs_bang.py`: kiểm mọi số liệu của một khách trong SQLite đều xuất hiện trong hồ sơ docx của khách đó.
+
+## Quy tắc kiểm hồ sơ và câu hỏi vàng
+
+- `schemas/legal_rules.yaml`: 15 quy tắc cho kịch bản kiểm hồ sơ và gợi ý pháp lý. Mỗi quy tắc có ngưỡng để code tính, căn cứ điều luật (đã đối chiếu PDF hay chưa), nguồn (luật, nhận xét chuyên gia, đối soát dữ liệu) và kết quả mong đợi trên KH002. Kèm danh sách giấy tờ bổ sung vào checklist theo case.
+- `eval/golden.jsonl`: 12 câu hỏi vàng kèm ý chính, tài liệu nguồn và quy tắc liên quan.
+
+Kiểm cả hai file với dữ liệu thật (tính lại tỷ lệ, thời hạn từ SQLite; dò điều khoản trong văn bản):
+
+```bat
+.venv\Scripts\python scripts\validate_rules.py data\hoso\KH002 data\bang\bang.sqlite3
+```
+
 ## Cấu trúc
 
 ```
 src/inhand_rag/llm.py        gọi LLM local, prompt trả lời có trích dẫn
+src/inhand_rag/ingest/bang.py  nạp Excel vào SQLite, kiểm chất lượng
 scripts/check_env.py         kiểm GPU, embedding, Qdrant
+scripts/check_hoso_vs_bang.py  đối chiếu hồ sơ docx với SQLite
 scripts/smoke_llm.py         kiểm nhanh LLM
 scripts/eval_llm_vi.py       bài thử tiếng Việt cho LLM
 scripts/build_kh002.py       dựng bộ hồ sơ KH002 chuẩn (schema 1.0)

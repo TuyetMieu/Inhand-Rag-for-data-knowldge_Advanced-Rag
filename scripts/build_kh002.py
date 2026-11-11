@@ -254,22 +254,51 @@ def docx_paragraphs(data):
     return out
 
 
-def docx_title(data):
-    """Dòng tiêu đề của văn bản: dòng viết hoa đầu tiên, bỏ quốc hiệu và phần đầu trang."""
+GENERIC_TITLES = ("QUYẾT ĐỊNH", "BIÊN BẢN BÀN GIAO", "PHIẾU THU NHẬN", "THÔNG BÁO")
+SUBTITLE_SKIP = ("DỰ THẢO", "MÃ ", "SỐ", "(", "KÈM THEO", "NGÀY", "HÔM NAY", "CĂN CỨ", "NGƯỜI CÓ THẨM QUYỀN",
+                 "HỘI ĐỒNG", "I ", "I.")
+
+
+def _subtitle(paras, i):
+    """Dòng phụ đề ngay sau tiêu đề chung chung (ví dụ 'V/v ...', 'Về việc ...')."""
+    for text in paras[i + 1:i + 3]:
+        up = text.upper()
+        if up.startswith(SUBTITLE_SKIP) or not 6 <= len(text) <= 100:
+            continue
+        return re.sub(r"^(V/v|Về việc)\s*", "", text, flags=re.I).strip()
+    return ""
+
+
+def docx_title(data, tranche=None):
+    """Dòng tiêu đề của văn bản: dòng viết hoa đầu tiên, bỏ quốc hiệu và phần đầu trang.
+
+    Tiêu đề chung chung ('QUYẾT ĐỊNH', 'BIÊN BẢN BÀN GIAO'...) được ghép thêm phụ đề;
+    tiêu đề kết thúc bằng 'ĐỢT' được ghép số đợt.
+    """
     paras = docx_paragraphs(data)
-    for text in paras[:20]:
+    title, idx = "", -1
+    for i, text in enumerate(paras[:20]):
         letters = [c for c in text if c.isalpha()]
         if not 8 <= len(text) <= 120 or len(letters) < 6:
             continue
         if sum(c.isupper() for c in letters) / len(letters) < 0.8:
             continue
-        if text.upper().startswith(SKIP_TITLE):
+        if text.upper().startswith(SKIP_TITLE + ("BỘ PHẬN",)):
             continue
-        return text
-    for text in paras[:5]:
-        if 8 <= len(text) <= 120 and not text.upper().startswith(SKIP_TITLE):
-            return text
-    return ""
+        title, idx = text, i
+        break
+    if not title:
+        for text in paras[:5]:
+            if 8 <= len(text) <= 120 and not text.upper().startswith(SKIP_TITLE):
+                return text
+        return ""
+    if title.upper() in GENERIC_TITLES:
+        sub = _subtitle(paras, idx)
+        if sub:
+            title = "%s: %s" % (title, sub)
+    if tranche and title.upper().endswith("ĐỢT"):
+        title = "%s %d" % (title, tranche)
+    return title
 
 
 def iso_date(s):
@@ -350,7 +379,7 @@ def main(zip_path, out_dir):
         docs.append({
             "id": "KH002-" + doc_id,
             "file": "%s/%s" % (folder, fname),
-            "title": docx_title(data),
+            "title": docx_title(data, tranche),
             "doc_type": doc_type,
             "stage": int(folder[1]) if folder != "QL" else o.get("stage", 0),
             "tranche": tranche,

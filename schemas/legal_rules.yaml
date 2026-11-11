@@ -1,0 +1,277 @@
+# Quy tắc kiểm hồ sơ giao dịch bất động sản (kịch bản B và C của demo).
+#
+# Mỗi quy tắc có:
+#   loai         nguong_ty_le | thoi_han | dieu_khoan_bat_buoc | theo_case | nhat_quan_du_lieu
+#   ap_dung      điều kiện theo case trong manifest.json và/hoặc doc_type cần đọc
+#   tham_so      ngưỡng để code tính (LLM không tự tính)
+#   can_cu       điều luật làm căn cứ; trang_thai cho biết đã đối chiếu văn bản gốc chưa
+#   nguon        luat | chuyen_gia (nhận xét về KH002, 11/2026) | doi_soat_du_lieu
+#   muc_do       vi_pham (trái luật) | canh_bao (rủi ro nghiệp vụ) | can_bo_sung (thiếu giấy tờ/điều khoản)
+#   kh002        kết quả mong đợi khi chạy trên KH002, dùng để kiểm thử
+#
+# trang_thai căn cứ:
+#   da_doi_chieu_pdf       đã đọc đúng điều, khoản trong file PDF của Dataset Luật
+#   chua_co_trong_dataset  văn bản luật liên quan chưa có trong Dataset Luật
+#   nghiep_vu              thông lệ nghiệp vụ theo chuyên gia, không phải quy định cứng
+
+schema_version: "1.0"
+
+van_ban:
+  LKDBDS-2023:
+    ten: Luật Kinh doanh bất động sản
+    so_hieu: 29/2023/QH15
+    file: "Dataset Luật/Luật kinh doanh bất động sản.pdf"
+    ghi_chu: Bản Công báo số 43 + 44 ngày 08/01/2024
+
+quy_tac:
+  - id: R01
+    ten: Tiền đặt cọc không quá 5% giá bán
+    loai: nguong_ty_le
+    ap_dung:
+      nha_hinh_thanh_trong_tuong_lai: true
+      doc_types: [hop_dong_dat_coc, phu_luc_tien_do_thanh_toan]
+    tham_so: {tu_so: tien_dat_coc, mau_so: gia_tri_hdmb, toi_da: 0.05}
+    can_cu:
+      - van_ban: LKDBDS-2023
+        dieu: 23
+        khoan: 5
+        trich: "Chủ đầu tư dự án bất động sản chỉ được thu tiền đặt cọc không quá 5% giá bán ... khi nhà ở, công trình xây dựng đã có đủ các điều kiện đưa vào kinh doanh"
+        trang_thai: da_doi_chieu_pdf
+    nguon: luat
+    muc_do: vi_pham
+    kh002: {ket_qua: vi_pham, gia_tri: 0.10, ghi_chu: "Cọc 3.038.686.489 trên giá 30.386.864.888"}
+
+  - id: R02
+    ten: Lần thanh toán đầu không quá 30% giá trị hợp đồng, kể cả tiền cọc
+    loai: nguong_ty_le
+    ap_dung:
+      nha_hinh_thanh_trong_tuong_lai: true
+      doc_types: [phu_luc_tien_do_thanh_toan, hop_dong_mua_ban]
+    tham_so: {tu_so: dot_1, mau_so: gia_tri_hdmb, toi_da: 0.30, ghi_chu: "dot_1 đã gồm tiền cọc"}
+    can_cu:
+      - van_ban: LKDBDS-2023
+        dieu: 25
+        khoan: 1
+        trich: "lần đầu không quá 30% giá trị hợp đồng bao gồm cả tiền đặt cọc"
+        trang_thai: da_doi_chieu_pdf
+    nguon: luat
+    muc_do: vi_pham
+    kh002: {ket_qua: dat, gia_tri: 0.20}
+
+  - id: R03
+    ten: Tổng tiền thu trước bàn giao không quá 70% (50% nếu bên bán có vốn đầu tư nước ngoài)
+    loai: nguong_ty_le
+    ap_dung:
+      nha_hinh_thanh_trong_tuong_lai: true
+      doc_types: [phu_luc_tien_do_thanh_toan, hop_dong_mua_ban]
+    tham_so:
+      tu_so: [dot_1, dot_2, dot_3]
+      mau_so: gia_tri_hdmb
+      toi_da: 0.70
+      toi_da_ben_ban_co_von_nuoc_ngoai: 0.50
+    can_cu:
+      - van_ban: LKDBDS-2023
+        dieu: 25
+        khoan: 1
+        trich: "tổng số không quá 70% giá trị hợp đồng khi chưa bàn giao ... trường hợp bên bán là tổ chức kinh tế có vốn đầu tư nước ngoài ... thì tổng số không quá 50%"
+        trang_thai: da_doi_chieu_pdf
+    nguon: luat
+    ghi_chu_chuyen_gia: "Tùy doanh nghiệp, mức thu trước bàn giao thường là 50% hoặc 70%."
+    muc_do: vi_pham
+    kh002: {ket_qua: vi_pham, gia_tri: 0.80, ghi_chu: "20% + 30% + 30%; chính hồ sơ G2-029, G2-032 đã ghi chú vượt 70%"}
+
+  - id: R04
+    ten: Chưa cấp sổ thì không thu quá 95%; phần còn lại thanh toán khi đã cấp sổ cho bên mua
+    loai: nguong_ty_le
+    ap_dung:
+      doc_types: [phu_luc_tien_do_thanh_toan, hop_dong_mua_ban]
+    tham_so: {tu_so: [dot_1, dot_2, dot_3, dot_4_ban_giao], mau_so: gia_tri_hdmb, toi_da: 0.95}
+    can_cu:
+      - van_ban: LKDBDS-2023
+        dieu: 25
+        khoan: 3
+        trich: "Nếu bên mua, thuê mua chưa được cấp giấy chứng nhận ... thì bên bán, cho thuê mua không được thu quá 95% giá trị hợp đồng"
+        trang_thai: da_doi_chieu_pdf
+    nguon: luat
+    ghi_chu_chuyen_gia: "Dữ liệu đã thu 90% trước khi có sổ; có thể thu thêm nhưng tối đa 95% khi chủ đầu tư chưa cấp sổ cho khách."
+    muc_do: vi_pham
+    kh002: {ket_qua: dat, gia_tri: 0.90}
+
+  - id: R05
+    ten: Chủ đầu tư nộp hồ sơ cấp sổ trong 50 ngày kể từ ngày bàn giao
+    loai: thoi_han
+    ap_dung:
+      doc_types: [bien_ban_nghiem_thu_ban_giao_nha, phieu_theo_doi_tiep_nhan_va_tra_ket_qua, don_dang_ky_bien_dong_dat_dai]
+    tham_so: {tu_ngay: ngay_ban_giao, den_ngay: ngay_nop_hs_sang_ten, toi_da_ngay: 50}
+    can_cu:
+      - van_ban: LKDBDS-2023
+        dieu: 17
+        khoan: 3
+        trich: "Trong thời hạn 50 ngày kể từ ngày bàn giao nhà ở cho bên mua ... thì phải nộp hồ sơ đề nghị cơ quan nhà nước có thẩm quyền cấp giấy chứng nhận"
+        trang_thai: da_doi_chieu_pdf
+    nguon: luat
+    muc_do: vi_pham
+    kh002: {ket_qua: dat, gia_tri: 47, ghi_chu: "Bàn giao 05/12/2027, nộp hồ sơ 21/01/2028"}
+
+  - id: R06
+    ten: Hợp đồng mua bán phải ghi thời hạn chủ đầu tư làm thủ tục cấp sổ
+    loai: dieu_khoan_bat_buoc
+    ap_dung:
+      doc_types: [hop_dong_mua_ban]
+    tham_so:
+      # Không vượt quá một đoạn văn ([^.\n]); phải có động từ thủ tục để tránh khớp "Giấy chứng nhận đăng ký doanh nghiệp".
+      tim_trong_van_ban: "\\b\\d+\\s*ngày[^.\\n]{0,150}(nộp hồ sơ|làm thủ tục|cấp giấy chứng nhận|cấp sổ)|(nộp hồ sơ|làm thủ tục|cấp giấy chứng nhận|cấp sổ)[^.\\n]{0,150}\\b\\d+\\s*ngày"
+    can_cu:
+      - van_ban: LKDBDS-2023
+        dieu: 17
+        khoan: 3
+        trang_thai: da_doi_chieu_pdf
+    nguon: chuyen_gia
+    nhan_xet_chuyen_gia: "Nếu không ghi rõ mốc thời gian chủ đầu tư xin cấp sổ thì rủi ro rất lớn cho người mua; thực tế có dự án khách đã trả đủ tiền nhưng chờ sổ hơn 10–20 năm."
+    muc_do: can_bo_sung
+    kh002: {ket_qua: thieu, ghi_chu: "Không có trong HĐMB G2-029, biên bản bàn giao và giấy tờ giai đoạn 5"}
+
+  - id: R07
+    ten: Có điều khoản xử lý khoản vay khi chủ đầu tư chậm hoặc không bàn giao
+    loai: dieu_khoan_bat_buoc
+    ap_dung:
+      case: {vay_ngan_hang: true}
+      doc_types: [thoa_thuan_ba_ben, hop_dong_tin_dung, hop_dong_mua_ban]
+    tham_so:
+      tim_trong_van_ban: "(chậm|không) bàn giao[^.\\n]{0,200}(hoàn trả|hoàn tiền|ngân hàng|dư nợ)"
+    can_cu:
+      - trang_thai: nghiep_vu
+    nguon: chuyen_gia
+    nhan_xet_chuyen_gia: "Chưa đề cập trường hợp dự án không bàn giao đúng hạn thì chủ đầu tư phải làm gì với số tiền cho ngân hàng."
+    muc_do: can_bo_sung
+    kh002: {ket_qua: thieu, ghi_chu: "G2-029 điều 10.4 chỉ dẫn chiếu phụ lục; G2-018 mục XI chỉ nói chung về chấm dứt và hoàn tiền"}
+
+  - id: R08
+    ten: Ghi rõ điều kiện và thời điểm ngân hàng giải ngân đợt cuối gắn với việc cấp sổ
+    loai: dieu_khoan_bat_buoc
+    ap_dung:
+      case: {vay_ngan_hang: true}
+      doc_types: [thoa_thuan_ba_ben, hop_dong_tin_dung, phe_duyet_tin_dung_dieu_kien_giai_ngan]
+    tham_so:
+      tim_trong_van_ban: "giải ngân[^.\\n]{0,200}((giấy chứng nhận|GCN)[^.\\n]{0,120}(xác nhận|sau khi)|(xác nhận|sau khi)[^.\\n]{0,120}(giấy chứng nhận|GCN))"
+    can_cu:
+      - van_ban: LKDBDS-2023
+        dieu: 25
+        khoan: 3
+        trang_thai: da_doi_chieu_pdf
+    nguon: chuyen_gia
+    nhan_xet_chuyen_gia: "Ngân hàng chỉ giải ngân phần cuối khi xác nhận khách đã nhận sổ; trước khi xác nhận, khoản tiền chuyển vào tài khoản chủ đầu tư có thể chưa sử dụng được."
+    muc_do: canh_bao
+    kh002: {ket_qua: thieu, ghi_chu: "QL-003 chỉ ghi ngày giải ngân đợt 5, không ghi điều kiện xác nhận sổ"}
+
+  - id: R09
+    ten: Vợ chồng cùng đứng tên mua và có vay thì cả hai phải là người vay, hoặc có văn bản đồng ý của người còn lại
+    loai: theo_case
+    ap_dung:
+      case: {loai_nguoi_mua: vo_chong_dong_so_huu, vay_ngan_hang: true}
+      doc_types: [phieu_thong_tin_hon_nhan_dong_so_huu, phe_duyet_tin_dung_dieu_kien_giai_ngan, hop_dong_tin_dung]
+    tham_so:
+      dau_hieu_chua_dat: ["chưa xác định đồng vay", "thỏa thuận riêng với BIDV"]
+    can_cu:
+      - ten: Luật Hôn nhân và gia đình (tài sản chung của vợ chồng)
+        trang_thai: chua_co_trong_dataset
+    nguon: chuyen_gia
+    nhan_xet_chuyen_gia: "HĐMB đứng tên cả hai vợ chồng thì người chồng cũng phải ký đồng vay; ghi 'chưa xác định đồng vay' sẽ khiến hồ sơ bị tắc ở khâu phê duyệt."
+    muc_do: can_bo_sung
+    kh002: {ket_qua: thieu, ghi_chu: "QL-002 ghi 'chưa xác định đồng vay'; QL-003 chỉ có vợ là khách vay"}
+
+  - id: R10
+    ten: Có người đồng vay thì phải có chứng từ thu nhập của từng người
+    loai: theo_case
+    ap_dung:
+      case: {vay_ngan_hang: true}
+      doc_types: [de_nghi_doi_chieu_xac_nhan_thu_nhap, danh_gia_so_bo_kha_nang_vay]
+    can_cu:
+      - trang_thai: nghiep_vu
+    nguon: chuyen_gia
+    nhan_xet_chuyen_gia: "Chỉ có giấy tờ chứng minh thu nhập của vợ; nếu không cố ý thì có rủi ro ngân hàng không duyệt."
+    muc_do: can_bo_sung
+    kh002: {ket_qua: thieu, ghi_chu: "G2-016 chỉ đề nghị xác nhận thu nhập của Trần Thu Hà"}
+
+  - id: R11
+    ten: Số thu nhập phải thống nhất giữa các văn bản vay
+    loai: nhat_quan_du_lieu
+    ap_dung:
+      case: {vay_ngan_hang: true}
+      doc_types: [danh_gia_so_bo_kha_nang_vay, phe_duyet_tin_dung_dieu_kien_giai_ngan, de_nghi_doi_chieu_xac_nhan_thu_nhap]
+    can_cu:
+      - trang_thai: nghiep_vu
+    nguon: doi_soat_du_lieu
+    muc_do: canh_bao
+    kh002: {ket_qua: lech, ghi_chu: "G1-023: 400 triệu/tháng (vợ 150 + chồng 250); QL-003: 500 triệu/tháng"}
+
+  - id: R12
+    ten: Mua sau khi kết hôn thì cần trích lục kết hôn hoặc xác nhận tình trạng hôn nhân của UBND
+    loai: theo_case
+    ap_dung:
+      case: {loai_nguoi_mua: vo_chong_dong_so_huu}
+      doc_types: [phieu_thong_tin_hon_nhan_dong_so_huu]
+    can_cu:
+      - ten: Luật Hôn nhân và gia đình
+        trang_thai: chua_co_trong_dataset
+    nguon: chuyen_gia
+    nhan_xet_chuyen_gia: "Với tài sản lớn mua sau kết hôn, các bên thường yêu cầu trích lục hoặc xác nhận hôn nhân của UBND cấp xã, phòng khi ly hôn hoặc phân chia tài sản."
+    muc_do: can_bo_sung
+    kh002: {ket_qua: thieu, ghi_chu: "QL-002 ghi chưa có bản gốc ĐKKH"}
+
+  - id: R13
+    ten: Số CCCD của mỗi người phải thống nhất trong toàn bộ hồ sơ và khớp dữ liệu khách hàng
+    loai: nhat_quan_du_lieu
+    ap_dung:
+      doc_types: ["*"]
+    can_cu:
+      - trang_thai: nghiep_vu
+    nguon: doi_soat_du_lieu
+    muc_do: canh_bao
+    kh002: {ket_qua: lech, ghi_chu: "Vợ 2 dạng số, chồng 3 dạng số; dạng dùng nhiều nhất của chồng không khớp Excel"}
+
+  - id: R14
+    ten: Một căn chỉ bán cho một khách
+    loai: nhat_quan_du_lieu
+    ap_dung:
+      doc_types: [phieu_xac_nhan_can_khong_ban_trung]
+    can_cu:
+      - trang_thai: nghiep_vu
+    nguon: doi_soat_du_lieu
+    muc_do: vi_pham
+    kh002: {ket_qua: dat, ghi_chu: "CT2-04 chỉ bán cho KH002; Excel có 3 căn khác bị bán trùng"}
+
+  - id: R15
+    ten: Chủ đầu tư không ủy quyền cho người khác ký hợp đồng đặt cọc, hợp đồng mua bán nhà hình thành trong tương lai
+    loai: theo_case
+    ap_dung:
+      nha_hinh_thanh_trong_tuong_lai: true
+      doc_types: [quyet_dinh_phan_cap_tham_quyen_ky, hop_dong_dat_coc, hop_dong_mua_ban]
+    can_cu:
+      - van_ban: LKDBDS-2023
+        dieu: 23
+        khoan: 4
+        diem: d
+        trich: "Không ủy quyền cho tổ chức, cá nhân khác ký hợp đồng đặt cọc, hợp đồng mua bán, thuê mua nhà ở ... hình thành trong tương lai"
+        trang_thai: da_doi_chieu_pdf
+    nguon: luat
+    muc_do: vi_pham
+    kh002: {ket_qua: chua_xac_dinh, ghi_chu: "Cần đọc G2-028 (phân cấp thẩm quyền ký) để xác định người ký là đại diện theo pháp luật hay được ủy quyền"}
+
+# Giấy tờ bổ sung vào checklist (kịch bản B), theo case.
+checklist_bo_sung:
+  - khi: {loai_nguoi_mua: vo_chong_dong_so_huu}
+    giai_doan: 1
+    tai_lieu: trich_luc_ket_hon_hoac_xac_nhan_hon_nhan
+    ten: Trích lục kết hôn hoặc xác nhận tình trạng hôn nhân của UBND cấp xã
+    quy_tac: R12
+  - khi: {loai_nguoi_mua: vo_chong_dong_so_huu, vay_ngan_hang: true}
+    giai_doan: 2
+    tai_lieu: van_ban_dong_vay_hoac_dong_y_vay
+    ten: Văn bản thỏa thuận đồng vay hoặc văn bản đồng ý của vợ/chồng
+    quy_tac: R09
+  - khi: {vay_ngan_hang: true}
+    giai_doan: 2
+    tai_lieu: chung_tu_thu_nhap_nguoi_dong_vay
+    ten: Chứng từ thu nhập của từng người vay và đồng vay
+    quy_tac: R10
