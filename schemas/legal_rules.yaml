@@ -249,6 +249,11 @@ quy_tac:
       doc_types: [quyet_dinh_phan_cap_tham_quyen_ky, hop_dong_dat_coc, hop_dong_mua_ban]
     can_cu:
       - van_ban: LKDBDS-2023
+        dieu: 17
+        khoan: 4
+        trich: "Không được ủy quyền cho tổ chức, cá nhân khác ký hợp đồng đặt cọc, mua bán, chuyển nhượng, cho thuê mua nhà ở, công trình xây dựng ... trong dự án bất động sản"
+        trang_thai: da_doi_chieu_pdf
+      - van_ban: LKDBDS-2023
         dieu: 23
         khoan: 4
         diem: d
