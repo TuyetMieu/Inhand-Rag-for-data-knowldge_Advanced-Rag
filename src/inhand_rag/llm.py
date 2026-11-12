@@ -31,7 +31,11 @@ def _load_env() -> None:
 _load_env()
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
 LLM_MODEL = os.environ.get("LLM_MODEL", "granite4.2:8b")
-LLM_NUM_CTX = int(os.environ.get("LLM_NUM_CTX", "8192"))
+# 6144 thay vì 8192: RTX 5070 Laptop 8 GB, Windows giữ ~1 GB; Granite 8B ở 8192 cần ~6,9 GB và bị
+# Ollama đẩy một phần sang CPU (đo 12/11/2026: bước trả lời từ ~9 s lên ~100 s).
+LLM_NUM_CTX = int(os.environ.get("LLM_NUM_CTX", "6144"))
+# Giữ model trong VRAM lâu hơn mặc định của Ollama, tránh nạp lại giữa buổi demo.
+LLM_KEEP_ALIVE = os.environ.get("LLM_KEEP_ALIVE", "2h")
 
 
 class LLMError(RuntimeError):
@@ -47,6 +51,7 @@ class LLMResult:
     output_tokens: int
     load_seconds: float
     total_seconds: float
+    done_reason: str = ""  # "stop" hoặc "length" (hết max_tokens)
 
     @property
     def tokens_per_second(self) -> float:
@@ -75,6 +80,17 @@ def server_version() -> str:
     return _request("/api/version", timeout=5)["version"]
 
 
+def loaded_models() -> list[dict]:
+    """Model đang nằm trong bộ nhớ: name, size, size_vram (byte), context_length."""
+    return _request("/api/ps", timeout=5).get("models", [])
+
+
+def warm_up(model: str = LLM_MODEL) -> dict:
+    """Nạp model vào VRAM trước khi nạp model khác lên GPU; trả về thông tin nạp (size, size_vram)."""
+    chat([{"role": "user", "content": "ok"}], model=model, max_tokens=1)
+    return next((m for m in loaded_models() if m["name"] == model), {})
+
+
 def installed_models() -> list[str]:
     return [m["name"] for m in _request("/api/tags", timeout=10).get("models", [])]
 
@@ -86,12 +102,14 @@ def chat(
     think: bool = False,
     num_ctx: int = LLM_NUM_CTX,
     max_tokens: int | None = None,
+    fmt: dict | str | None = None,
 ) -> LLMResult:
     """Gửi hội thoại, trả về câu trả lời và số liệu tốc độ.
 
     think=False tắt chế độ suy luận của Granite 4.2 để trả lời nhanh;
     bật lên khi cần câu trả lời cẩn thận hơn (chậm hơn đáng kể).
     max_tokens tính cả phần suy luận, nên khi bật suy luận mặc định cho nhiều hơn.
+    fmt: JSON schema (hoặc "json") để Ollama ép đầu ra đúng cấu trúc.
     """
     if max_tokens is None:
         max_tokens = 4096 if think else 1024
@@ -100,8 +118,11 @@ def chat(
         "messages": messages,
         "stream": False,
         "think": think,
+        "keep_alive": LLM_KEEP_ALIVE,
         "options": {"temperature": temperature, "num_ctx": num_ctx, "num_predict": max_tokens},
     }
+    if fmt is not None:
+        payload["format"] = fmt
     start = time.perf_counter()
     out = _request("/api/chat", payload)
     total = time.perf_counter() - start
@@ -114,6 +135,7 @@ def chat(
         output_tokens=out.get("eval_count", 0),
         load_seconds=out.get("load_duration", 0) / 1e9,
         total_seconds=total,
+        done_reason=out.get("done_reason", ""),
     )
 
 

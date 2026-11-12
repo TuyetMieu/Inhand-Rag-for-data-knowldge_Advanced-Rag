@@ -13,10 +13,14 @@ import os
 import time
 
 MODEL = os.environ.get("RERANK_MODEL", "jinaai/jina-reranker-v3.5")
-MAX_DOC_CHARS = 1500  # chunk luật tối đa 3000 ký tự: cắt bớt cho nhanh
-# Số ứng viên hybrid đưa vào reranker. Đo 12/11/2026 trên RTX 5070 8 GB, Granite đang nạp:
-# 30 ứng viên ~1,9 s, VRAM 2,9 GB; 20 ứng viên ~1,0 s, VRAM 2,15 GB, MRR gần như bằng nhau.
-CANDIDATES = int(os.environ.get("RERANK_K", "20"))
+# Thiết bị mặc định là CPU: khi trả lời, GPU 8 GB dành cho Granite (5,8 GB ở num_ctx 6144, Windows giữ
+# ~1 GB), chỉ còn ~1 GB, không đủ cho reranker (2,15 GB). Đo 12/11/2026: để reranker trên GPU làm Granite
+# bị đẩy một phần sang CPU, bước trả lời từ ~9 s lên ~100 s. Đặt RERANK_DEVICE=cuda khi GPU còn trống.
+DEVICE = os.environ.get("RERANK_DEVICE") or "cpu"
+# Số ứng viên hybrid đưa vào reranker và độ dài mỗi đoạn. GPU (đo 12/11/2026): 20 ứng viên ~1,0 s,
+# 30 ứng viên ~1,9 s, MRR gần như bằng nhau. CPU: 30 ứng viên x 1.500 ký tự mất ~33 s, nên rút còn 12 x 800.
+CANDIDATES = int(os.environ.get("RERANK_K", "20" if DEVICE == "cuda" else "12"))
+MAX_DOC_CHARS = int(os.environ.get("RERANK_DOC_CHARS", "1500" if DEVICE == "cuda" else "800"))
 
 
 class Reranker:
@@ -24,7 +28,9 @@ class Reranker:
         import torch
         from transformers import AutoModel
 
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device or DEVICE
+        if self.device == "cuda" and not torch.cuda.is_available():
+            self.device = "cpu"
         dtype = torch.bfloat16 if self.device == "cuda" else torch.float32
         self.model = AutoModel.from_pretrained(MODEL, dtype=dtype, trust_remote_code=True).to(self.device).eval()
         self.last_ms = 0.0

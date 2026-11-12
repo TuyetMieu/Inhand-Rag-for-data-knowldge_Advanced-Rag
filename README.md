@@ -186,6 +186,64 @@ Cần Qdrant đang chạy (mục đầu README) và tắt Ollama (embed bằng G
 - Trên CPU rerank 30 ứng viên mất trung vị 33 s, nên **reranker phải chạy trên GPU**, chung với Granite.
 - Lúc đo, `ollama ps` báo Granite 5,9 GB, `100% GPU`, ngữ cảnh 4096 (do lệnh `ollama run`). Granite cộng reranker (2,15 GB) vừa khít 8 GB. Pipeline gọi Granite với `num_ctx` 8192 (`LLM_NUM_CTX`), tốn thêm VRAM; cần đo lại khi chạy pipeline thật. Ngữ cảnh đưa vào LLM cũng phải có giới hạn: 6 chunk cha có thể dài tới hơn 20.000 ký tự, vượt 8192 token.
 
+## Pipeline trả lời (LangGraph)
+
+`src/inhand_rag/graph/` dựng đồ thị bằng LangGraph 1.2.20 (ra 05/11/2026, MIT):
+
+```
+understand ─┬─ ngoài phạm vi ─► từ chối
+            └─► retrieve ─► rerank ─► expand ─► answer ─┬─ đủ căn cứ ─► verify
+                   ▲                                    ├─ "không đủ căn cứ" (lần 1) ─► rewrite ─┐
+                   └────────────────────────────────────┴────────────────────────────────────────┘
+                                                        └─ "không đủ căn cứ" (lần 2) ─► từ chối
+```
+
+| Bước | Làm gì | LLM? |
+|---|---|---|
+| understand | Chọn nguồn `hoso` / `luat` / `ca_hai` / `ngoai_pham_vi`, viết câu hỏi độc lập theo hội thoại, viết riêng một truy vấn bằng thuật ngữ pháp lý cho collection `luat` (câu hỏi về KH002 không khớp lời văn luật). Câu nêu thẳng "Điều N Luật X" luôn được tra luật. | Có, đầu ra JSON theo schema |
+| retrieve | Hybrid trên Qdrant, 20 ứng viên mỗi nguồn, lọc theo mã hồ sơ (mặc định `KH002`, đổi bằng `MA_HO_SO`). Bỏ phụ lục mẫu hợp đồng của nghị định trừ khi câu hỏi nhắc "mẫu"/"phụ lục" (chúng lấn át điều luật). Điều luật nêu thẳng trong câu hỏi được ghim lên đầu. | Không |
+| rerank | jina-reranker-v3.5, giữ 6 (4 mỗi nguồn khi hỏi cả hai). **Mặc định tắt** trên máy 8 GB (xem lần đo thứ ba), khi đó lấy thẳng top của hybrid. | Không |
+| expand | Đổi sang chunk cha, gắn mã trích dẫn (`KH002-G1-011`, `LKDBDS-2023-D25`), giới hạn tổng 10.000 ký tự (`MAX_CONTEXT_CHARS`), chia đều khi hỏi hai nguồn. Đo được tiếng Việt khoảng 2 ký tự/token với Granite: 14.000 ký tự đã vượt `num_ctx` 8192. | Không |
+| answer | Trả lời tối đa 4 ý, mỗi ý kèm `[mã nguồn]`, chỉ dùng tài liệu, không tự làm tính; tối đa 350 token. Tài liệu không đủ thì trả "Không đủ căn cứ…". | Có |
+| grade | Cạnh điều kiện sau answer: "không đủ căn cứ" thì rewrite, lần hai thì từ chối. Bản đầu chấm bằng một lượt LLM riêng trước answer, tốn 3,7 s mỗi câu, nên đã gộp vào answer. | Không |
+| rewrite | Viết lại truy vấn (từ đồng nghĩa, tên giấy tờ, thuật ngữ luật), tìm lại (tối đa 1 lần). | Có, JSON |
+| verify | Code kiểm từng dòng: mã nguồn không có trong tài liệu, hoặc dòng nêu "Điều N" mà trích mã của Điều khác, thì bỏ dòng. Câu trả lời có trích luật được thêm ghi chú "không thay thế ý kiến luật sư". | Không |
+
+Truy vấn luật đổi từ thường ngày sang từ trong luật ("sổ hồng" thành "giấy chứng nhận quyền sử dụng đất, quyền sở hữu nhà ở"). Các truy vấn được embed trong một lượt trên CPU, không gọi mạng (`HF_HUB_OFFLINE=1`).
+
+Lần đo đầu (12/11/2026, bản còn grade riêng, 15 câu): trích đúng ít nhất 1 tài liệu vàng 8/15, từ chối câu ngoài phạm vi 3/3, trung vị 22 s mỗi câu (understand 2,3 s, retrieve 3,5 s, rerank 1,8 s, grade 3,7 s, answer 9,4 s). Đã sửa: bỏ grade riêng, embed gộp, câu trả lời ngắn hơn, bỏ dòng cuối bị cắt.
+
+Lần đo thứ hai: trung vị 124 s mỗi câu, bước answer 100 s. Nguyên nhân là VRAM: Windows và các ứng dụng giữ ~1 GB của 8 GB; Granite ở `num_ctx` 8192 cần ~6,9 GB, reranker trên GPU thêm 2,15 GB, và Ollama nạp Granite sau reranker nên đẩy một phần lớp sang CPU. Đã sửa:
+
+- `num_ctx` 6144 (`LLM_NUM_CTX`): Granite 5,81 GB, nằm trọn trên GPU; đọc 4.484 token tài liệu và viết 100 token trong 4,2 s. Tài liệu đưa vào giảm còn 9.000 ký tự.
+- Pipeline nạp Granite trước mọi model khác và giữ trong VRAM 2 giờ (`LLM_KEEP_ALIVE`). `check_graph.py` in Granite có nằm trọn trên GPU không.
+- Reranker mặc định chạy CPU với 12 ứng viên x 800 ký tự (`RERANK_DEVICE`, `RERANK_K`, `RERANK_DOC_CHARS`); `RERANK=on` để bật rerank.
+
+Lần đo thứ ba (Granite 5,81 GB trọn GPU, ngữ cảnh 6144):
+
+| | Rerank CPU (12 ứng viên) | Không rerank |
+|---|---|---|
+| Trích đúng ít nhất 1 tài liệu vàng | 7/15 | 7/15 |
+| Từ chối câu ngoài phạm vi | 3/3 | 3/3 |
+| Thời gian mỗi câu, trung vị / chậm nhất | 22,9 s / 44,8 s | **14,7 s** / 30,9 s |
+| Từng bước (trung bình) | understand 1,8; retrieve 3,6; rerank 8,9; answer 8,5 s | understand 1,8; retrieve 3,7; answer 9,0 s |
+
+`check_hybrid.py` với rerank CPU 12 ứng viên: MRR luật 0,64 lên 0,70, hồ sơ 0,78 lên 0,87, mất trung vị 5,2 s mỗi lượt. Trên máy 8 GB, cái lợi về thứ hạng không đáng 9 s mỗi câu, nên **pipeline mặc định tắt rerank** (`set RERANK=on` để bật). Rerank vẫn là một bước của đồ thị và dùng được ngay trên máy có GPU lớn hơn (`RERANK_DEVICE=cuda`).
+
+Còn yếu: câu cần so số với ngưỡng luật (g01–g04) để LLM tự tính, lúc đúng lúc sai, cần `legal_checks.py`; câu cần ghi chú chuyên gia (`KH002-QL-002`, `QL-003`) chưa tìm ra; câu trả lời hay dài quá 350 token nên dòng cuối bị cắt và bị bỏ.
+
+Chạy (Qdrant và `ollama serve` với `OLLAMA_MODELS` đã bật như trên):
+
+```bat
+.venv\Scripts\python -W ignore scripts\ask.py "Đợt 2 KH002 bao nhiêu là vốn tự có, bao nhiêu là vốn vay?"
+```
+
+Bỏ câu hỏi để hỏi liên tục (nhớ hội thoại); thêm `--context` để in tài liệu đưa vào LLM. Đo trên 12 câu vàng, 3 câu kịch bản A và 3 câu ngoài phạm vi:
+
+```bat
+.venv\Scripts\python -W ignore scripts\check_graph.py
+```
+
 ## Quy tắc kiểm hồ sơ và câu hỏi vàng
 
 - `schemas/legal_rules.yaml`: 15 quy tắc cho kịch bản kiểm hồ sơ và gợi ý pháp lý. Mỗi quy tắc có ngưỡng để code tính, căn cứ điều luật (đã đối chiếu PDF hay chưa), nguồn (luật, nhận xét chuyên gia, đối soát dữ liệu) và kết quả mong đợi trên KH002. Kèm danh sách giấy tờ bổ sung vào checklist theo case.
@@ -206,8 +264,11 @@ src/inhand_rag/ingest/hoso.py  docx hồ sơ -> chunk cha–con có tiêu đề 
 src/inhand_rag/ingest/luat.py  văn bản luật -> Điều/Khoản (PDF text và bản OCR)
 src/inhand_rag/index/          BM25 thưa, ghi Qdrant
 src/inhand_rag/retrieve/       hybrid RRF, rerank, mở rộng chunk cha, tra trích dẫn Điều/Khoản
+src/inhand_rag/graph/          đồ thị LangGraph: prompts, nodes, graph (ask)
 scripts/build_index.py       dựng collection luat, hoso
-scripts/check_hybrid.py      so BM25 / vector / hybrid
+scripts/check_hybrid.py      so BM25 / vector / hybrid / rerank
+scripts/ask.py               hỏi pipeline từ dòng lệnh
+scripts/check_graph.py       đo pipeline trên câu vàng và câu ngoài phạm vi
 scripts/check_env.py         kiểm GPU, embedding, Qdrant
 scripts/check_hoso_vs_bang.py  đối chiếu hồ sơ docx với SQLite
 scripts/smoke_llm.py         kiểm nhanh LLM

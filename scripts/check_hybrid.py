@@ -2,7 +2,7 @@
 
 Luật: 10 câu của check_luat_search.py (đúng = chunk Điều/Khoản). Hồ sơ: 10 câu về KH002 (đúng = tài liệu).
 Cần Qdrant đang chạy và đã chạy scripts/build_index.py. Embed câu hỏi trên CPU để chạy được cả khi
-Ollama đang giữ GPU. Reranker chạy trên GPU nếu có (đặt RERANK_DEVICE=cpu để thử CPU).
+Ollama đang giữ GPU. Reranker mặc định chạy CPU, 12 ứng viên x 800 ký tự (đặt RERANK_DEVICE=cuda để thử GPU).
 
 Cách chạy (từ gốc repo):
     .venv\\Scripts\\python scripts/check_hybrid.py

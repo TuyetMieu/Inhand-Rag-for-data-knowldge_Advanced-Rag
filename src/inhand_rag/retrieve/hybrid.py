@@ -35,17 +35,18 @@ def embed_query(embedder, collection: str, query: str) -> list[float]:
 
 
 def search(cl: QdrantClient, embedder, collection: str, query: str, k: int = 30,
-           flt: dict | None = None, mode: str = "hybrid") -> list[dict]:
+           flt: dict | None = None, mode: str = "hybrid", dense: list[float] | None = None) -> list[dict]:
+    """dense: vector câu hỏi đã embed sẵn (để embed nhiều truy vấn trong một lượt)."""
     f = make_filter(flt)
     idx, val = sparse.query_vector(query)
     sv = models.SparseVector(indices=idx, values=val)
     if mode == "bm25":
         res = cl.query_points(collection, query=sv, using="bm25", limit=k, query_filter=f, with_payload=True)
     elif mode == "dense":
-        res = cl.query_points(collection, query=embed_query(embedder, collection, query), using="dense",
+        res = cl.query_points(collection, query=dense or embed_query(embedder, collection, query), using="dense",
                               limit=k, query_filter=f, with_payload=True)
     else:
-        dense = embed_query(embedder, collection, query)
+        dense = dense or embed_query(embedder, collection, query)
         res = cl.query_points(
             collection,
             prefetch=[models.Prefetch(query=dense, using="dense", limit=max(PREFETCH, k), filter=f),
